@@ -17,3 +17,8 @@ test('Parse SQL Query', () => {
         table: 'sample'
     });
 });
+
+test('Invalid SQL Query', () => {
+    const invalidQuery = 'INVALID SQL QUERY';
+    expect(() => parseQuery(invalidQuery)).toThrow('Invalid query format');
+});
