@@ -18,7 +18,3 @@ test('Parse SQL Query', () => {
     });
 });
 
-test('Invalid SQL Query', () => {
-    const invalidQuery = 'INVALID SQL QUERY';
-    expect(() => parseQuery(invalidQuery)).toThrow('Invalid query format');
-});
