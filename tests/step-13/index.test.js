@@ -1,6 +1,6 @@
-const readCSV = require('../../src/csvReader');
-const {parseQuery, parseJoinClause} = require('../../src/queryParser');
-const executeSELECTQuery = require('../../src/index');
+const {readCSV} = require('../../src/csvReader');
+const {executeSELECTQuery } = require('../../src/queryExecuter');
+const {parseJoinClause, parseSelectQuery } = require('../../src/queryParser');
 
 test('Read CSV File', async () => {
     const data = await readCSV('./student.csv');
@@ -211,7 +211,6 @@ test('Count enrollments per course', async () => {
     ]);
 });
 
-
 test('Count courses per student', async () => {
     const query = 'SELECT student_id, COUNT(*) FROM enrollment GROUP BY student_id';
     const result = await executeSELECTQuery(query);
@@ -256,9 +255,86 @@ test('Average age of students above a certain age', async () => {
     expect(result).toEqual([{ 'AVG(age)': expectedAverage }]);
 });
 
+test('Execute SQL Query with ORDER BY', async () => {
+    const query = 'SELECT name FROM student ORDER BY name ASC';
+    const result = await executeSELECTQuery(query);
+
+    expect(result).toStrictEqual([
+        { name: 'Alice' },
+        { name: 'Bob' },
+        { name: 'Jane' },
+        { name: 'Jane' },
+        { name: 'John' }
+    ]);
+});
+
+test('Execute SQL Query with ORDER BY and WHERE', async () => {
+    const query = 'SELECT name FROM student WHERE age > 24 ORDER BY name DESC';
+    const result = await executeSELECTQuery(query);
+
+    expect(result).toStrictEqual([
+        { name: 'John' },
+        { name: 'Jane' },
+    ]);
+});
+
+test('Execute SQL Query with ORDER BY and GROUP BY', async () => {
+    const query = 'SELECT COUNT(id) as count, age FROM student GROUP BY age ORDER BY age DESC';
+    const result = await executeSELECTQuery(query);
+
+    expect(result).toStrictEqual([
+        { age: '30', 'COUNT(id) as count': 1 },
+        { age: '25', 'COUNT(id) as count': 1 },
+        { age: '24', 'COUNT(id) as count': 1 },
+        { age: '22', 'COUNT(id) as count': 2 }
+    ]);
+});
+
+test('Execute SQL Query with standard LIMIT clause', async () => {
+    const query = 'SELECT id, name FROM student LIMIT 2';
+    const result = await executeSELECTQuery(query);
+    expect(result.length).toEqual(2);
+});
+
+test('Execute SQL Query with LIMIT clause equal to total rows', async () => {
+    const query = 'SELECT id, name FROM student LIMIT 4';
+    const result = await executeSELECTQuery(query);
+    expect(result.length).toEqual(4);
+});
+
+test('Execute SQL Query with LIMIT clause exceeding total rows', async () => {
+    const query = 'SELECT id, name FROM student LIMIT 10';
+    const result = await executeSELECTQuery(query);
+    expect(result.length).toEqual(5); // Total rows in student.csv
+});
+
+test('Execute SQL Query with LIMIT 0', async () => {
+    const query = 'SELECT id, name FROM student LIMIT 0';
+    const result = await executeSELECTQuery(query);
+    expect(result.length).toEqual(0);
+});
+
+test('Execute SQL Query with LIMIT and ORDER BY clause', async () => {
+    const query = 'SELECT id, name FROM student ORDER BY age DESC LIMIT 2';
+    const result = await executeSELECTQuery(query);
+    expect(result.length).toEqual(2);
+    expect(result[0].name).toEqual('John');
+    expect(result[1].name).toEqual('Jane');
+});
+
+test('Error Handling with Malformed Query', async () => {
+    const query = 'SELECT FROM table'; // intentionally malformed
+    await expect(executeSELECTQuery(query)).rejects.toThrow("Error executing query: Query parsing error: Invalid SELECT format");
+});
+
+test('Error Handling with Malformed Query', async () => {
+    const query = 'SELECT FROM table'; // intentionally malformed
+    expect(() => parseSelectQuery(query)).toThrow("Query parsing error: Invalid SELECT format");
+});
+
 test('Parse SQL Query', () => {
     const query = 'SELECT id, name FROM student';
-    const parsed = parseQuery(query);
+    const parsed = parseSelectQuery(query);
     expect(parsed).toEqual({
         fields: ['id', 'name'],
         table: 'student',
@@ -276,7 +352,7 @@ test('Parse SQL Query', () => {
 
 test('Parse SQL Query with WHERE Clause', () => {
     const query = 'SELECT id, name FROM student WHERE age = 25';
-    const parsed = parseQuery(query);
+    const parsed = parseSelectQuery(query);
     expect(parsed).toEqual({
         fields: ['id', 'name'],
         table: 'student',
@@ -298,7 +374,7 @@ test('Parse SQL Query with WHERE Clause', () => {
 
 test('Parse SQL Query with Multiple WHERE Clauses', () => {
     const query = 'SELECT id, name FROM student WHERE age = 30 AND name = John';
-    const parsed = parseQuery(query);
+    const parsed = parseSelectQuery(query);
     expect(parsed).toEqual({
         fields: ['id', 'name'],
         table: 'student',
@@ -324,7 +400,7 @@ test('Parse SQL Query with Multiple WHERE Clauses', () => {
 
 test('Parse SQL Query with INNER JOIN', async () => {
     const query = 'SELECT student.name, enrollment.course FROM student INNER JOIN enrollment ON student.id=enrollment.student_id';
-    const result = await parseQuery(query);
+    const result = await parseSelectQuery(query);
     expect(result).toEqual({
         fields: ['student.name', 'enrollment.course'],
         table: 'student',
@@ -342,7 +418,7 @@ test('Parse SQL Query with INNER JOIN', async () => {
 
 test('Parse SQL Query with INNER JOIN and WHERE Clause', async () => {
     const query = 'SELECT student.name, enrollment.course FROM student INNER JOIN enrollment ON student.id = enrollment.student_id WHERE student.age > 20';
-    const result = await parseQuery(query);
+    const result = await parseSelectQuery(query);
     expect(result).toEqual({
         fields: ['student.name', 'enrollment.course'],
         table: 'student',
@@ -402,7 +478,7 @@ test('Returns null for queries without JOIN', () => {
 
 test('Parse LEFT Join Query Completely', () => {
     const query = 'SELECT student.name, enrollment.course FROM student LEFT JOIN enrollment ON student.id=enrollment.student_id';
-    const result = parseQuery(query);
+    const result = parseSelectQuery(query);
     expect(result).toEqual({
         fields: ['student.name', 'enrollment.course'],
         table: 'student',
@@ -420,7 +496,7 @@ test('Parse LEFT Join Query Completely', () => {
 
 test('Parse LEFT Join Query Completely', () => {
     const query = 'SELECT student.name, enrollment.course FROM student RIGHT JOIN enrollment ON student.id=enrollment.student_id';
-    const result = parseQuery(query);
+    const result = parseSelectQuery(query);
     expect(result).toEqual({
         fields: ['student.name', 'enrollment.course'],
         table: 'student',
@@ -438,7 +514,7 @@ test('Parse LEFT Join Query Completely', () => {
 
 test('Parse SQL Query with LEFT JOIN with a WHERE clause filtering the main table', async () => {
     const query = 'SELECT student.name, enrollment.course FROM student LEFT JOIN enrollment ON student.id=enrollment.student_id WHERE student.age > 22';
-    const result = await parseQuery(query);
+    const result = await parseSelectQuery(query);
     expect(result).toEqual({
         "fields": ["student.name", "enrollment.course"],
         "joinCondition": { "left": "student.id", "right": "enrollment.student_id" },
@@ -456,7 +532,7 @@ test('Parse SQL Query with LEFT JOIN with a WHERE clause filtering the main tabl
 
 test('Parse SQL Query with LEFT JOIN with a WHERE clause filtering the join table', async () => {
     const query = `SELECT student.name, enrollment.course FROM student LEFT JOIN enrollment ON student.id=enrollment.student_id WHERE enrollment.course = 'Physics'`;
-    const result = await parseQuery(query);
+    const result = await parseSelectQuery(query);
     expect(result).toEqual({
         "fields": ["student.name", "enrollment.course"],
         "joinCondition": { "left": "student.id", "right": "enrollment.student_id" },
@@ -474,7 +550,7 @@ test('Parse SQL Query with LEFT JOIN with a WHERE clause filtering the join tabl
 
 test('Parse SQL Query with RIGHT JOIN with a WHERE clause filtering the main table', async () => {
     const query = 'SELECT student.name, enrollment.course FROM student RIGHT JOIN enrollment ON student.id=enrollment.student_id WHERE student.age < 25';
-    const result = await parseQuery(query);
+    const result = await parseSelectQuery(query);
     expect(result).toEqual({
         "fields": ["student.name", "enrollment.course"],
         "joinCondition": { "left": "student.id", "right": "enrollment.student_id" },
@@ -492,7 +568,7 @@ test('Parse SQL Query with RIGHT JOIN with a WHERE clause filtering the main tab
 
 test('Parse SQL Query with RIGHT JOIN with a WHERE clause filtering the join table', async () => {
     const query = `SELECT student.name, enrollment.course FROM student RIGHT JOIN enrollment ON student.id=enrollment.student_id WHERE enrollment.course = 'Chemistry'`;
-    const result = await parseQuery(query);
+    const result = await parseSelectQuery(query);
     expect(result).toEqual({
         "fields": ["student.name", "enrollment.course"],
         "joinCondition": { "left": "student.id", "right": "enrollment.student_id" },
@@ -508,10 +584,9 @@ test('Parse SQL Query with RIGHT JOIN with a WHERE clause filtering the join tab
     });
 });
 
-
 test('Parse COUNT Aggregate Query', () => {
     const query = 'SELECT COUNT(*) FROM student';
-    const parsed = parseQuery(query);
+    const parsed = parseSelectQuery(query);
     expect(parsed).toEqual({
         fields: ['COUNT(*)'],
         table: 'student',
@@ -527,10 +602,9 @@ test('Parse COUNT Aggregate Query', () => {
     });
 });
 
-
 test('Parse SUM Aggregate Query', () => {
     const query = 'SELECT SUM(age) FROM student';
-    const parsed = parseQuery(query);
+    const parsed = parseSelectQuery(query);
     expect(parsed).toEqual({
         fields: ['SUM(age)'],
         table: 'student',
@@ -548,7 +622,7 @@ test('Parse SUM Aggregate Query', () => {
 
 test('Parse AVG Aggregate Query', () => {
     const query = 'SELECT AVG(age) FROM student';
-    const parsed = parseQuery(query);
+    const parsed = parseSelectQuery(query);
     expect(parsed).toEqual({
         fields: ['AVG(age)'],
         table: 'student',
@@ -566,7 +640,7 @@ test('Parse AVG Aggregate Query', () => {
 
 test('Parse MIN Aggregate Query', () => {
     const query = 'SELECT MIN(age) FROM student';
-    const parsed = parseQuery(query);
+    const parsed = parseSelectQuery(query);
     expect(parsed).toEqual({
         fields: ['MIN(age)'],
         table: 'student',
@@ -584,7 +658,7 @@ test('Parse MIN Aggregate Query', () => {
 
 test('Parse MAX Aggregate Query', () => {
     const query = 'SELECT MAX(age) FROM student';
-    const parsed = parseQuery(query);
+    const parsed = parseSelectQuery(query);
     expect(parsed).toEqual({
         fields: ['MAX(age)'],
         table: 'student',
@@ -602,7 +676,7 @@ test('Parse MAX Aggregate Query', () => {
 
 test('Parse basic GROUP BY query', () => {
     const query = 'SELECT age, COUNT(*) FROM student GROUP BY age';
-    const parsed = parseQuery(query);
+    const parsed = parseSelectQuery(query);
     expect(parsed).toEqual({
         fields: ['age', 'COUNT(*)'],
         table: 'student',
@@ -620,7 +694,7 @@ test('Parse basic GROUP BY query', () => {
 
 test('Parse GROUP BY query with WHERE clause', () => {
     const query = 'SELECT age, COUNT(*) FROM student WHERE age > 22 GROUP BY age';
-    const parsed = parseQuery(query);
+    const parsed = parseSelectQuery(query);
     expect(parsed).toEqual({
         fields: ['age', 'COUNT(*)'],
         table: 'student',
@@ -638,7 +712,7 @@ test('Parse GROUP BY query with WHERE clause', () => {
 
 test('Parse GROUP BY query with multiple fields', () => {
     const query = 'SELECT student_id, course, COUNT(*) FROM enrollment GROUP BY student_id, course';
-    const parsed = parseQuery(query);
+    const parsed = parseSelectQuery(query);
     expect(parsed).toEqual({
         fields: ['student_id', 'course', 'COUNT(*)'],
         table: 'enrollment',
@@ -656,7 +730,7 @@ test('Parse GROUP BY query with multiple fields', () => {
 
 test('Parse GROUP BY query with JOIN and WHERE clauses', () => {
     const query = 'SELECT student.name, COUNT(*) FROM student INNER JOIN enrollment ON student.id = enrollment.student_id WHERE enrollment.course = "Mathematics" GROUP BY student.name';
-    const parsed = parseQuery(query);
+    const parsed = parseSelectQuery(query);
     expect(parsed).toEqual({
         fields: ['student.name', 'COUNT(*)'],
         table: 'student',
@@ -675,73 +749,59 @@ test('Parse GROUP BY query with JOIN and WHERE clauses', () => {
     });
 });
 
-test('Execute SQL Query with ORDER BY', async () => {
+test('Parse SQL Query with ORDER BY', () => {
     const query = 'SELECT name FROM student ORDER BY name ASC';
-    const result = await executeSELECTQuery(query);
-
-    expect(result).toStrictEqual([
-        { name: 'Alice' },
-        { name: 'Bob' },
-        { name: 'Jane' },
-        { name: 'Jane' },
-        { name: 'John' }
-    ]);
+    const parsed = parseSelectQuery(query);
+    expect(parsed.orderByFields).toEqual([{ fieldName: 'name', order: 'ASC' }]);
 });
 
-test('Execute SQL Query with ORDER BY and WHERE', async () => {
-    const query = 'SELECT name FROM student WHERE age > 24 ORDER BY name DESC';
-    const result = await executeSELECTQuery(query);
-
-    expect(result).toStrictEqual([
-        { name: 'John' },
-        { name: 'Jane' },
-    ]);
-});
-test('Execute SQL Query with ORDER BY and GROUP BY', async () => {
-    const query = 'SELECT COUNT(id) as count, age FROM student GROUP BY age ORDER BY age DESC';
-    const result = await executeSELECTQuery(query);
-
-    expect(result).toStrictEqual([
-        { age: '30', 'COUNT(id) as count': 1 },
-        { age: '25', 'COUNT(id) as count': 1 },
-        { age: '24', 'COUNT(id) as count': 1 },
-        { age: '22', 'COUNT(id) as count': 2 }
-    ]);
+test('Parse SQL Query with ORDER BY and WHERE', () => {
+    const query = 'SELECT name FROM student WHERE age > 20 ORDER BY name DESC';
+    const parsed = parseSelectQuery(query);
+    expect(parsed.orderByFields).toEqual([{ fieldName: 'name', order: 'DESC' }]);
+    expect(parsed.whereClauses.length).toBeGreaterThan(0);
 });
 
-test('Execute SQL Query with standard LIMIT clause', async () => {
+test('Parse SQL Query with ORDER BY and GROUP BY', () => {
+    const query = 'SELECT COUNT(id), age FROM student GROUP BY age ORDER BY age DESC';
+    const parsed = parseSelectQuery(query);
+    expect(parsed.orderByFields).toEqual([{ fieldName: 'age', order: 'DESC' }]);
+    expect(parsed.groupByFields).toEqual(['age']);
+});
+
+test('Parse SQL Query with standard LIMIT clause', () => {
     const query = 'SELECT id, name FROM student LIMIT 2';
-    const result = await executeSELECTQuery(query);
-    expect(result.length).toEqual(2);
+    const parsed = parseSelectQuery(query);
+    expect(parsed.limit).toEqual(2);
+});
+test('Parse SQL Query with standard LIMIT clause', () => {
+    const query = 'SELECT id, name FROM student LIMIT 2';
+    const parsed = parseSelectQuery(query);
+    expect(parsed.limit).toEqual(2);
 });
 
-test('Execute SQL Query with LIMIT clause equal to total rows', async () => {
-    const query = 'SELECT id, name FROM student LIMIT 4';
-    const result = await executeSELECTQuery(query);
-    expect(result.length).toEqual(4);
+test('Parse SQL Query with large number in LIMIT clause', () => {
+    const query = 'SELECT id, name FROM student LIMIT 1000';
+    const parsed = parseSelectQuery(query);
+    expect(parsed.limit).toEqual(1000);
 });
 
-test('Execute SQL Query with LIMIT clause exceeding total rows', async () => {
-    const query = 'SELECT id, name FROM student LIMIT 10';
-    const result = await executeSELECTQuery(query);
-    expect(result.length).toEqual(5); // Total rows in student.csv
+test('Parse SQL Query without LIMIT clause', () => {
+    const query = 'SELECT id, name FROM student';
+    const parsed = parseSelectQuery(query);
+    expect(parsed.limit).toBeNull();
 });
 
-test('Execute SQL Query with LIMIT 0', async () => {
+test('Parse SQL Query with LIMIT 0', () => {
     const query = 'SELECT id, name FROM student LIMIT 0';
-    const result = await executeSELECTQuery(query);
-    expect(result.length).toEqual(0);
+    const parsed = parseSelectQuery(query);
+    expect(parsed.limit).toEqual(0);
 });
 
-test('Execute SQL Query with LIMIT and ORDER BY clause', async () => {
-    const query = 'SELECT id, name FROM student ORDER BY age DESC LIMIT 2';
-    const result = await executeSELECTQuery(query);
-    expect(result.length).toEqual(2);
-    expect(result[0].name).toEqual('John');
-    expect(result[1].name).toEqual('Jane');
+test('Parse SQL Query with negative number in LIMIT clause', () => {
+    const query = 'SELECT id, name FROM student LIMIT -1';
+    const parsed = parseSelectQuery(query);
+    // Assuming the parser sets limit to null for invalid values
+    expect(parsed.limit).toBeNull();
 });
 
-test('Error Handling with Malformed Query', async () => {
-    const query = 'SELECT FROM table'; // intentionally malformed
-    await expect(executeSELECTQuery(query)).rejects.toThrow("Error executing query: Query parsing error: Invalid SELECT format");
-});

@@ -1,6 +1,6 @@
-const readCSV = require('../../src/csvReader');
-const { parseJoinClause, parseQuery } = require('../../src/queryParser');
-const executeSELECTQuery = require('../../src/index');
+const {readCSV} = require('../../src/csvReader');
+const {executeSELECTQuery } = require('../../src/queryExecuter');
+const {parseJoinClause, parseSelectQuery } = require('../../src/queryParser');
 
 test('Read CSV File', async () => {
     const data = await readCSV('./student.csv');
@@ -12,7 +12,7 @@ test('Read CSV File', async () => {
 
 test('Parse SQL Query', () => {
     const query = 'SELECT id, name FROM student';
-    const parsed = parseQuery(query);
+    const parsed = parseSelectQuery(query);
     expect(parsed).toEqual({
         fields: ['id', 'name'],
         table: 'student',
@@ -30,7 +30,7 @@ test('Parse SQL Query', () => {
 
 test('Parse SQL Query with WHERE Clause', () => {
     const query = 'SELECT id, name FROM student WHERE age = 25';
-    const parsed = parseQuery(query);
+    const parsed = parseSelectQuery(query);
     expect(parsed).toEqual({
         fields: ['id', 'name'],
         table: 'student',
@@ -52,7 +52,7 @@ test('Parse SQL Query with WHERE Clause', () => {
 
 test('Parse SQL Query with Multiple WHERE Clauses', () => {
     const query = 'SELECT id, name FROM student WHERE age = 30 AND name = John';
-    const parsed = parseQuery(query);
+    const parsed = parseSelectQuery(query);
     expect(parsed).toEqual({
         fields: ['id', 'name'],
         table: 'student',
@@ -78,7 +78,7 @@ test('Parse SQL Query with Multiple WHERE Clauses', () => {
 
 test('Parse SQL Query with INNER JOIN', async () => {
     const query = 'SELECT student.name, enrollment.course FROM student INNER JOIN enrollment ON student.id=enrollment.student_id';
-    const result = await parseQuery(query);
+    const result = await parseSelectQuery(query);
     expect(result).toEqual({
         fields: ['student.name', 'enrollment.course'],
         table: 'student',
@@ -96,7 +96,7 @@ test('Parse SQL Query with INNER JOIN', async () => {
 
 test('Parse SQL Query with INNER JOIN and WHERE Clause', async () => {
     const query = 'SELECT student.name, enrollment.course FROM student INNER JOIN enrollment ON student.id = enrollment.student_id WHERE student.age > 20';
-    const result = await parseQuery(query);
+    const result = await parseSelectQuery(query);
     expect(result).toEqual({
         fields: ['student.name', 'enrollment.course'],
         table: 'student',
@@ -157,7 +157,7 @@ test('Returns null for queries without JOIN', () => {
 
 test('Parse LEFT Join Query Completely', () => {
     const query = 'SELECT student.name, enrollment.course FROM student LEFT JOIN enrollment ON student.id=enrollment.student_id';
-    const result = parseQuery(query);
+    const result = parseSelectQuery(query);
     expect(result).toEqual({
         fields: ['student.name', 'enrollment.course'],
         table: 'student',
@@ -175,7 +175,7 @@ test('Parse LEFT Join Query Completely', () => {
 
 test('Parse RIGHT Join Query Completely', () => {
     const query = 'SELECT student.name, enrollment.course FROM student RIGHT JOIN enrollment ON student.id=enrollment.student_id';
-    const result = parseQuery(query);
+    const result = parseSelectQuery(query);
     expect(result).toEqual({
         fields: ['student.name', 'enrollment.course'],
         table: 'student',
@@ -193,7 +193,7 @@ test('Parse RIGHT Join Query Completely', () => {
 
 test('Parse SQL Query with LEFT JOIN with a WHERE clause filtering the main table', async () => {
     const query = 'SELECT student.name, enrollment.course FROM student LEFT JOIN enrollment ON student.id=enrollment.student_id WHERE student.age > 22';
-    const result = await parseQuery(query);
+    const result = await parseSelectQuery(query);
     expect(result).toEqual({
         "fields": ["student.name", "enrollment.course"],
         "joinCondition": { "left": "student.id", "right": "enrollment.student_id" },
@@ -211,7 +211,7 @@ test('Parse SQL Query with LEFT JOIN with a WHERE clause filtering the main tabl
 
 test('Parse SQL Query with LEFT JOIN with a WHERE clause filtering the join table', async () => {
     const query = `SELECT student.name, enrollment.course FROM student LEFT JOIN enrollment ON student.id=enrollment.student_id WHERE enrollment.course = 'Physics'`;
-    const result = await parseQuery(query);
+    const result = await parseSelectQuery(query);
     expect(result).toEqual({
         "fields": ["student.name", "enrollment.course"],
         "joinCondition": { "left": "student.id", "right": "enrollment.student_id" },
@@ -229,7 +229,7 @@ test('Parse SQL Query with LEFT JOIN with a WHERE clause filtering the join tabl
 
 test('Parse SQL Query with RIGHT JOIN with a WHERE clause filtering the main table', async () => {
     const query = 'SELECT student.name, enrollment.course FROM student RIGHT JOIN enrollment ON student.id=enrollment.student_id WHERE student.age < 25';
-    const result = await parseQuery(query);
+    const result = await parseSelectQuery(query);
     expect(result).toEqual({
         "fields": ["student.name", "enrollment.course"],
         "joinCondition": { "left": "student.id", "right": "enrollment.student_id" },
@@ -247,7 +247,7 @@ test('Parse SQL Query with RIGHT JOIN with a WHERE clause filtering the main tab
 
 test('Parse SQL Query with RIGHT JOIN with a WHERE clause filtering the join table', async () => {
     const query = `SELECT student.name, enrollment.course FROM student RIGHT JOIN enrollment ON student.id=enrollment.student_id WHERE enrollment.course = 'Chemistry'`;
-    const result = await parseQuery(query);
+    const result = await parseSelectQuery(query);
     expect(result).toEqual({
         "fields": ["student.name", "enrollment.course"],
         "joinCondition": { "left": "student.id", "right": "enrollment.student_id" },
