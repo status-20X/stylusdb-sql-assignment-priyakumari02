@@ -1,4 +1,4 @@
-const { parseSelectQuery, parseInsertQuery } = require('./queryParser');
+const { parseSelectQuery, parseInsertQuery, parseDeleteQuery } = require('./queryParser');
 const { readCSV, writeCSV } = require('./csvReader');
 
 function performInnerJoin(data, joinData, joinCondition, fields, table) {
@@ -84,7 +84,7 @@ function createResultRow(mainRow, joinRow, fields, table, includeAllMainFields) 
 
 function evaluateCondition(row, clause) {
     let { field, operator, value } = clause;
-
+    console.log("field",field," ",operator, " " ,value);
     // Check if the field exists in the row
     if (row[field] === undefined) {
         throw new Error(`Invalid field: ${field}`);
@@ -348,5 +348,25 @@ async function executeINSERTQuery(query) {
     return { message: "Row inserted successfully." };
 }
 
+async function executeDELETEQuery(query) {
+    const { table, whereClauses } = parseDeleteQuery(query);
+    let data = await readCSV(`${table}.csv`);
+    console.log("Table and whereClauses : ",table," ",whereClauses);
+    if (whereClauses.length > 0) {
+        // Filter out the rows that meet the where clause conditions
+        data = data.filter(row => !whereClauses.every(clause => evaluateCondition(row, clause)));
+        
+        
+    } else {
+        // If no where clause, clear the entire table
+        data = [];
+    }
 
-module.exports = { executeSELECTQuery, executeINSERTQuery };
+    // Save the updated data back to the CSV file
+    await writeCSV(`${table}.csv`, data);
+    console.log("data :",data);
+    return { message: "Rows deleted successfully." };
+}
+
+
+module.exports = { executeSELECTQuery, executeINSERTQuery, executeDELETEQuery };
